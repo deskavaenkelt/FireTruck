@@ -15,10 +15,12 @@
 #define STEERING_A4_PIN 10
 
 // Analog pins:
-#define BUTTON_PIN 14 // ***********************A0 pin as digital pin A0-A5 = 14-19
+#define BUTTON_PIN 14        // ***********************A0 pin as digital pin A0-A5 = 14-19
+#define VOLTAGE_SENSE_PIN A1 // Voltage divider input for battery/PSU voltage sensing
 
-#endif 
+#endif
 
 // Dead Pins: 4
-// Free Analog Pins: A1, A2, A3, A4, A5
+// Free Analog Pins: A2, A3, A4, A5
 // Free Digital Pins: 11, 12, 13
+// Used Analog Pins: A0 (button), A1 (voltage sensing)

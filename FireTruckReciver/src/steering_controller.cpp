@@ -8,57 +8,225 @@ void SteeringController::initialize()
     pinMode(STEERING_A4_PIN, OUTPUT);
     digitalWrite(STEERING_A3_PIN, LOW);
     digitalWrite(STEERING_A4_PIN, LOW);
+
+    // Initialize voltage sensing
+    pinMode(VOLTAGE_SENSE_PIN, INPUT);
+    updatePowerLimitsBasedOnVoltage();
+}
+
+float SteeringController::readSupplyVoltage()
+{
+    int analogValue = analogRead(VOLTAGE_SENSE_PIN);
+    // Convert ADC reading to actual voltage
+    float measuredVoltage = (analogValue / 1023.0) * ARDUINO_VREF;
+    // Calculate actual supply voltage using voltage divider ratio
+    float supplyVoltage = measuredVoltage / VOLTAGE_DIVIDER_RATIO;
+    return supplyVoltage;
+}
+
+void SteeringController::updatePowerLimitsBasedOnVoltage()
+{
+    if (BENCH_TEST_MODE)
+    {
+        // Simple bench test mode - use safe power levels
+        maxLeftPower = BENCH_TEST_MAX_POWER;
+        maxRightPower = BENCH_TEST_MAX_POWER + 20; // Still compensate for asymmetry
+
+        Serial.println("BENCH TEST MODE - Using safe power levels for 12V testing");
+        Serial.print("Max Powers - Left: ");
+        Serial.print(maxLeftPower);
+        Serial.print(", Right: ");
+        Serial.println(maxRightPower);
+        return;
+    }
+
+    // Original voltage sensing code with safety checks
+    float supplyVoltage = readSupplyVoltage();
+
+    // Safety check - if voltage reading seems unrealistic, use safe defaults
+    if (supplyVoltage < 4.0 || supplyVoltage > 15.0)
+    {
+        Serial.print("WARNING: Unrealistic voltage reading: ");
+        Serial.print(supplyVoltage);
+        Serial.println("V - Using safe default power levels");
+        maxLeftPower = 80;   // Safe default
+        maxRightPower = 100; // Safe default with asymmetry compensation
+        return;
+    }
+
+    // Calculate power scaling factor to maintain ~6V to motors
+    float scaleFactor = TARGET_VOLTAGE / supplyVoltage;
+    if (scaleFactor > 1.0)
+        scaleFactor = 1.0; // Don't boost above 100%
+
+    // Apply scaling to power limits
+    maxLeftPower = (int)(127 * scaleFactor);
+    maxRightPower = (int)(200 * scaleFactor); // Still compensate for asymmetry
+
+    // Additional safety - never exceed safe limits even with scaling
+    if (maxLeftPower > 150)
+        maxLeftPower = 150;
+    if (maxRightPower > 180)
+        maxRightPower = 180;
+
+    // Debug output
+    Serial.print("Supply Voltage: ");
+    Serial.print(supplyVoltage);
+    Serial.print("V, Scale Factor: ");
+    Serial.print(scaleFactor);
+    Serial.print(", Max Powers - Left: ");
+    Serial.print(maxLeftPower);
+    Serial.print(", Right: ");
+    Serial.println(maxRightPower);
 }
 
 void SteeringController::control(int angle)
 {
+    unsigned long currentTime = millis();
+
+    // Periodically update power limits based on voltage
+    if (currentTime - lastVoltageCheck >= VOLTAGE_CHECK_INTERVAL)
+    {
+        updatePowerLimitsBasedOnVoltage();
+        lastVoltageCheck = currentTime;
+    }
+
+    // Determine current steering state based on input
+    SteeringState newState;
+    if (angle >= ANGLE_DEADZONE_MIN && angle <= ANGLE_DEADZONE_MAX)
+    {
+        newState = CENTER;
+    }
+    else if (angle < ANGLE_DEADZONE_MIN)
+    {
+        newState = STEERING_LEFT;
+    }
+    else
+    {
+        newState = STEERING_RIGHT;
+    }
+
+    // Detect state transitions for return pulse logic
+    if (newState != currentState)
+    {
+        previousState = currentState;
+        currentState = newState;
+
+        // Start return pulse when transitioning from steering to center
+        if (newState == CENTER)
+        {
+            if (previousState == STEERING_LEFT)
+            {
+                currentState = RETURNING_FROM_LEFT;
+                returnPulseStartTime = currentTime;
+            }
+            else if (previousState == STEERING_RIGHT)
+            {
+                currentState = RETURNING_FROM_RIGHT;
+                returnPulseStartTime = currentTime;
+            }
+        }
+    }
+
     int targetLeftPower = 0;
     int targetRightPower = 0;
 
-    // Center deadzone - stop steering
-    if (angle >= ANGLE_DEADZONE_MIN && angle <= ANGLE_DEADZONE_MAX)
+    // Handle return pulses
+    if (currentState == RETURNING_FROM_LEFT)
+    {
+        if (currentTime - returnPulseStartTime < RETURN_PULSE_DURATION)
+        {
+            // Give a stronger pulse in opposite direction (right) to help return from left
+            targetLeftPower = RETURN_PULSE_POWER_FROM_LEFT;
+            targetRightPower = 0;
+        }
+        else
+        {
+            // Return pulse complete, go to center
+            currentState = CENTER;
+            targetLeftPower = 0;
+            targetRightPower = 0;
+        }
+    }
+    else if (currentState == RETURNING_FROM_RIGHT)
+    {
+        if (currentTime - returnPulseStartTime < RETURN_PULSE_DURATION)
+        {
+            // Give a normal pulse in opposite direction (left) to help return from right
+            targetLeftPower = 0;
+            targetRightPower = RETURN_PULSE_POWER_FROM_RIGHT;
+        }
+        else
+        {
+            // Return pulse complete, go to center
+            currentState = CENTER;
+            targetLeftPower = 0;
+            targetRightPower = 0;
+        }
+    }
+    // Normal steering operations
+    else if (currentState == CENTER)
     {
         targetLeftPower = 0;
         targetRightPower = 0;
     }
     // Left steering (angle < center)
-    else if (angle < ANGLE_DEADZONE_MIN)
+    else if (currentState == STEERING_LEFT)
     {
         targetLeftPower = 0; // Stop right motor
 
         if (angle < MAX_LEFT)
         {
             // Maximum left steering
-            targetRightPower = MAX_ANGLE;
+            targetRightPower = maxLeftPower;
         }
         else
         {
             // Proportional left steering
-            targetRightPower = map(angle, MAX_LEFT, ANGLE_DEADZONE_MIN, MAX_ANGLE, 0);
+            targetRightPower = map(angle, MAX_LEFT, ANGLE_DEADZONE_MIN, maxLeftPower, 0);
         }
     }
     // Right steering (angle > center)
-    else if (angle > ANGLE_DEADZONE_MAX)
+    else if (currentState == STEERING_RIGHT)
     {
         targetRightPower = 0; // Stop left motor
 
         if (angle > MAX_RIGHT)
         {
-            // Maximum right steering
-            targetLeftPower = MAX_ANGLE;
+            // Maximum right steering with voltage-adjusted power
+            targetLeftPower = maxRightPower;
         }
         else
         {
-            // Proportional right steering
-            targetLeftPower = map(angle, ANGLE_DEADZONE_MAX, MAX_RIGHT, 0, MAX_ANGLE);
+            // Proportional right steering with voltage-adjusted power
+            targetLeftPower = map(angle, ANGLE_DEADZONE_MAX, MAX_RIGHT, 0, maxRightPower);
         }
     }
 
-    // Apply smoothing for more responsive control
-    lastLeftPower = (int)(SMOOTHING_FACTOR * targetLeftPower + (1.0 - SMOOTHING_FACTOR) * lastLeftPower);
-    lastRightPower = (int)(SMOOTHING_FACTOR * targetRightPower + (1.0 - SMOOTHING_FACTOR) * lastRightPower);
+    // Apply smoothing for more responsive control (but not during return pulses)
+    if (currentState != RETURNING_FROM_LEFT && currentState != RETURNING_FROM_RIGHT)
+    {
+        lastLeftPower = (int)(SMOOTHING_FACTOR * targetLeftPower + (1.0 - SMOOTHING_FACTOR) * lastLeftPower);
+        lastRightPower = (int)(SMOOTHING_FACTOR * targetRightPower + (1.0 - SMOOTHING_FACTOR) * lastRightPower);
+    }
+    else
+    {
+        // Direct application during return pulses for immediate response
+        lastLeftPower = targetLeftPower;
+        lastRightPower = targetRightPower;
+    }
 
-    // Apply the smoothed values
+    // Apply the values
     analogWrite(STEERING_A3_PIN, lastLeftPower);
     analogWrite(STEERING_A4_PIN, lastRightPower);
+
+    // Debug output for tuning (uncomment if needed)
+    // if (lastLeftPower > 0 || lastRightPower > 0) {
+    //     Serial.print("Steering - Left: ");
+    //     Serial.print(lastLeftPower);
+    //     Serial.print(" Right: ");
+    //     Serial.print(lastRightPower);
+    //     Serial.print(" Angle: ");
+    //     Serial.println(angle);
+    // }
 }
