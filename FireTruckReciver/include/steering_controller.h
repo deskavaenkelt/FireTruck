@@ -35,6 +35,9 @@ private:
     static const bool BENCH_TEST_MODE = true;    // Set to false for normal operation
     static const int BENCH_TEST_MAX_POWER = 100; // Safe power for 12V bench testing
 
+    // Debug mode for steering troubleshooting
+    static const bool SIMPLE_DEBUG_MODE = true; // Set to true for direct mapping debug
+
     int lastLeftPower = 0;
     int lastRightPower = 0;
     static constexpr float SMOOTHING_FACTOR = 0.7; // Higher = more responsive

@@ -92,8 +92,8 @@ void initializeRadio()
 
 int removeInputJitter(int input)
 {
-  if (input >= 132 && input <= 122)
-  { // remove center jitter
+  if (input >= 122 && input <= 132)
+  { // remove center jitter - FIXED: was backwards!
     return 127;
   }
   else if (input < 20)

@@ -9,6 +9,11 @@ void SteeringController::initialize()
     digitalWrite(STEERING_A3_PIN, LOW);
     digitalWrite(STEERING_A4_PIN, LOW);
 
+    // Increase PWM frequency to reduce audible noise from H-bridge
+    // Timer 1 controls pins 9 and 10 (STEERING_A3_PIN and STEERING_A4_PIN)
+    // Default frequency is ~490Hz, we'll increase it to ~31kHz (above human hearing)
+    TCCR1B = TCCR1B & 0b11111000 | 0x01; // Set prescaler to 1 for ~31kHz PWM
+
     // Initialize voltage sensing
     pinMode(VOLTAGE_SENSE_PIN, INPUT);
     updatePowerLimitsBasedOnVoltage();
@@ -82,6 +87,68 @@ void SteeringController::updatePowerLimitsBasedOnVoltage()
 
 void SteeringController::control(int angle)
 {
+    // SIMPLE DEBUG MODE - Direct mapping for troubleshooting
+    if (SIMPLE_DEBUG_MODE)
+    {
+        Serial.print("DEBUG: Raw angle input: ");
+        Serial.println(angle);
+
+        // Simple direct mapping with FULL POWER for testing (ignores all limitations)
+        if (angle >= 120 && angle <= 134)
+        {
+            // Center deadzone
+            analogWrite(STEERING_A3_PIN, 0);
+            analogWrite(STEERING_A4_PIN, 0);
+            Serial.println("DEBUG: Center - Both motors OFF");
+        }
+        else if (angle < 120)
+        {
+            // Left steering - activate right motor (A4) with AGGRESSIVE MAPPING
+            // Make left steering equally aggressive to match right steering
+            int power;
+            if (angle >= 105)
+            {
+                // For small left movements (105-119), give high power immediately
+                power = map(angle, 119, 105, 150, 255); // Start at PWM 150!
+            }
+            else
+            {
+                // For larger movements, stay at max
+                power = 255;
+            }
+            power = constrain(power, 0, 255);
+            analogWrite(STEERING_A3_PIN, 0);
+            analogWrite(STEERING_A4_PIN, power);
+            Serial.print("DEBUG: Left steering - A4 power: ");
+            Serial.print(power);
+            Serial.println(" (AGGRESSIVE MAPPING to match right steering)");
+        }
+        else if (angle > 134)
+        {
+            // Right steering - activate left motor (A3) with AGGRESSIVE MAPPING
+            // Make right steering much more sensitive - start at higher PWM
+            int power;
+            if (angle <= 150)
+            {
+                // For small right movements (135-150), give high power immediately
+                power = map(angle, 135, 150, 150, 255); // Start at PWM 150!
+            }
+            else
+            {
+                // For larger movements, stay at max
+                power = 255;
+            }
+            power = constrain(power, 0, 255);
+            analogWrite(STEERING_A3_PIN, power);
+            analogWrite(STEERING_A4_PIN, 0);
+            Serial.print("DEBUG: Right steering - A3 power: ");
+            Serial.print(power);
+            Serial.println(" (AGGRESSIVE MAPPING for weak right motor)");
+        }
+        return; // Exit early when in debug mode
+    }
+
+    // COMPLEX LOGIC (current implementation)
     unsigned long currentTime = millis();
 
     // Periodically update power limits based on voltage
