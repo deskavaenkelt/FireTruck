@@ -9,10 +9,15 @@ void SteeringController::initialize()
     digitalWrite(STEERING_A3_PIN, LOW);
     digitalWrite(STEERING_A4_PIN, LOW);
 
-    // Increase PWM frequency to reduce audible noise from H-bridge
+    // Optimize PWM frequency specifically for L298N H-bridge
+    // Using lowest practical frequency for completely silent operation
     // Timer 1 controls pins 9 and 10 (STEERING_A3_PIN and STEERING_A4_PIN)
-    // Default frequency is ~490Hz, we'll increase it to ~31kHz (above human hearing)
-    TCCR1B = TCCR1B & 0b11111000 | 0x01; // Set prescaler to 1 for ~31kHz PWM
+    TCCR1A = (TCCR1A & 0b11111100) | 0b01; // Set WGM11:10 = 01 for Phase Correct PWM
+    TCCR1B = (TCCR1B & 0b11111000) | 0x04; // Set prescaler to 256 for ~3.9kHz PWM (silent operation)
+
+    // This gives 16MHz / (256 * 2 * 256) = 3.9kHz - completely silent, still efficient for L298N
+
+    // Ultimate fallback if still audible: Use prescaler 0x05 for 1.95kHz (may cause slight motor roughness)
 
     // Initialize voltage sensing
     pinMode(VOLTAGE_SENSE_PIN, INPUT);
@@ -33,11 +38,11 @@ void SteeringController::updatePowerLimitsBasedOnVoltage()
 {
     if (BENCH_TEST_MODE)
     {
-        // Simple bench test mode - use safe power levels
-        maxLeftPower = BENCH_TEST_MAX_POWER;
-        maxRightPower = BENCH_TEST_MAX_POWER + 20; // Still compensate for asymmetry
+        // Bench test mode with asymmetric compensation from debug testing
+        maxLeftPower = BENCH_TEST_MAX_POWER;       // Left motor (for right steering)
+        maxRightPower = BENCH_TEST_MAX_POWER + 20; // Right motor (for left steering) - reduced asymmetry
 
-        Serial.println("BENCH TEST MODE - Using safe power levels for 12V testing");
+        Serial.println("BENCH TEST MODE - Using optimized power levels for 12V testing");
         Serial.print("Max Powers - Left: ");
         Serial.print(maxLeftPower);
         Serial.print(", Right: ");
@@ -242,15 +247,16 @@ void SteeringController::control(int angle)
     {
         targetLeftPower = 0; // Stop right motor
 
-        if (angle < MAX_LEFT)
+        // AGGRESSIVE MAPPING for left steering with REALISTIC SOFT LIMITS
+        if (angle >= SOFT_LIMIT_LEFT)
         {
-            // Maximum left steering
-            targetRightPower = maxLeftPower;
+            // Near center - small left movements, give moderate power
+            targetRightPower = map(angle, 119, SOFT_LIMIT_LEFT, (int)(0.6 * maxLeftPower), (int)(0.8 * maxLeftPower));
         }
         else
         {
-            // Proportional left steering
-            targetRightPower = map(angle, MAX_LEFT, ANGLE_DEADZONE_MIN, maxLeftPower, 0);
+            // At soft limit - stop here to prevent mechanical noise
+            targetRightPower = (int)(0.8 * maxLeftPower); // Good power but stop at safe limit
         }
     }
     // Right steering (angle > center)
@@ -258,15 +264,16 @@ void SteeringController::control(int angle)
     {
         targetRightPower = 0; // Stop left motor
 
-        if (angle > MAX_RIGHT)
+        // AGGRESSIVE MAPPING for right steering with REALISTIC SOFT LIMITS
+        if (angle <= SOFT_LIMIT_RIGHT)
         {
-            // Maximum right steering with voltage-adjusted power
-            targetLeftPower = maxRightPower;
+            // Near center - small right movements, give moderate power
+            targetLeftPower = map(angle, ANGLE_DEADZONE_MAX, SOFT_LIMIT_RIGHT, (int)(0.6 * maxRightPower), (int)(0.8 * maxRightPower));
         }
         else
         {
-            // Proportional right steering with voltage-adjusted power
-            targetLeftPower = map(angle, ANGLE_DEADZONE_MAX, MAX_RIGHT, 0, maxRightPower);
+            // At soft limit - stop here to prevent mechanical noise
+            targetLeftPower = (int)(0.8 * maxRightPower); // Good power but stop at safe limit
         }
     }
 
@@ -287,13 +294,16 @@ void SteeringController::control(int angle)
     analogWrite(STEERING_A3_PIN, lastLeftPower);
     analogWrite(STEERING_A4_PIN, lastRightPower);
 
-    // Debug output for tuning (uncomment if needed)
-    // if (lastLeftPower > 0 || lastRightPower > 0) {
-    //     Serial.print("Steering - Left: ");
-    //     Serial.print(lastLeftPower);
-    //     Serial.print(" Right: ");
-    //     Serial.print(lastRightPower);
-    //     Serial.print(" Angle: ");
-    //     Serial.println(angle);
-    // }
+    // Debug output for tuning
+    if (lastLeftPower > 0 || lastRightPower > 0)
+    {
+        Serial.print("ADVANCED: Left PWM: ");
+        Serial.print(lastLeftPower);
+        Serial.print(" | Right PWM: ");
+        Serial.print(lastRightPower);
+        Serial.print(" | Angle: ");
+        Serial.print(angle);
+        Serial.print(" | State: ");
+        Serial.println(currentState);
+    }
 }

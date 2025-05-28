@@ -19,9 +19,13 @@ private:
     static const int MAX_LEFT = 20;
     static const int MAX_RIGHT = 235;
 
-    // Voltage-adaptive power settings
-    int maxLeftPower = 127;  // Will be adjusted based on voltage
-    int maxRightPower = 200; // Will be adjusted based on voltage
+    // Soft limits based on actual mechanical testing (real limits ~110-140)
+    static const int SOFT_LIMIT_LEFT = 115;  // Just inside real mechanical limit (~110)
+    static const int SOFT_LIMIT_RIGHT = 135; // Just inside real mechanical limit (~140)
+
+    // Voltage-adaptive power settings - Updated with aggressive mapping from debug testing
+    int maxLeftPower = 200;  // Increased from 127 for better response
+    int maxRightPower = 255; // Keep high for weak right motor compensation
 
     // Voltage sensing
     static const int VOLTAGE_SENSE_PIN = A1;        // Use A1 as defined in pins.h
@@ -33,14 +37,14 @@ private:
 
     // Alternative: Simple bench test mode (comment out voltage sensing if using this)
     static const bool BENCH_TEST_MODE = true;    // Set to false for normal operation
-    static const int BENCH_TEST_MAX_POWER = 100; // Safe power for 12V bench testing
+    static const int BENCH_TEST_MAX_POWER = 140; // Reduced from 180 for smoother operation
 
     // Debug mode for steering troubleshooting
-    static const bool SIMPLE_DEBUG_MODE = true; // Set to true for direct mapping debug
+    static const bool SIMPLE_DEBUG_MODE = false; // Set to false for advanced steering system
 
     int lastLeftPower = 0;
     int lastRightPower = 0;
-    static constexpr float SMOOTHING_FACTOR = 0.7; // Higher = more responsive
+    static constexpr float SMOOTHING_FACTOR = 0.8; // Higher = more responsive, lower = smoother
 
     // Return pulse system for DC motor centering
     enum SteeringState
@@ -54,9 +58,9 @@ private:
     SteeringState currentState = CENTER;
     SteeringState previousState = CENTER;
     unsigned long returnPulseStartTime = 0;
-    static const unsigned long RETURN_PULSE_DURATION = 120; // ms - slightly longer for better centering
-    static const int RETURN_PULSE_POWER_FROM_LEFT = 120;    // Moderate pulse when returning from left
-    static const int RETURN_PULSE_POWER_FROM_RIGHT = 100;   // Stronger pulse when returning from right (to match higher right power)
+    static const unsigned long RETURN_PULSE_DURATION = 80; // Reduced from 120ms for quicker centering
+    static const int RETURN_PULSE_POWER_FROM_LEFT = 80;    // Reduced from 120 for smoother centering
+    static const int RETURN_PULSE_POWER_FROM_RIGHT = 70;   // Reduced from 100 for smoother centering
 
     // Methods
     void updatePowerLimitsBasedOnVoltage();
