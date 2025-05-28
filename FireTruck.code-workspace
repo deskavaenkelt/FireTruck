@@ -1,0 +1,16 @@
+{
+	"folders": [
+		{
+			"path": "FireTruck"
+		},
+		{
+			"name": "FireTruckSender",
+			"path": "FireTruckSender"
+		},
+		{
+			"name": "FireTruckReciver",
+			"path": "FireTruckReciver"
+		}
+	],
+	"settings": {}
+}
