@@ -5,7 +5,8 @@
 #include "pins.h"
 #include "globals.h"
 
-class SteeringController {
+class SteeringController
+{
 public:
     SteeringController();
     void initialize();
@@ -17,10 +18,10 @@ private:
     static const int ANGLE_DEADZONE_MAX = 134;
     static const int MAX_LEFT = 20;
     static const int MAX_RIGHT = 235;
-    
-    unsigned long lastPulseTime = 0;
-    bool isPulseActive = false;
-    void handlePulseTiming();
+
+    int lastLeftPower = 0;
+    int lastRightPower = 0;
+    static constexpr float SMOOTHING_FACTOR = 0.7; // Higher = more responsive
 };
 
-#endif 
+#endif

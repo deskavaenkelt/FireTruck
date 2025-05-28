@@ -12,8 +12,8 @@ int SERVO_MAX_RANGE = 160;
 const float SMOOTHING_FACTOR = 0.3; // Justera mellan 0.1 (mjukare) och 0.5 (snabbare)
 int lastSteeringOutput = 0;
 unsigned long lastSteeringPulseTime = 0;
-const unsigned long STEERING_PULSE_INTERVAL = 30; // Time between pulses (ms) org 50
-const unsigned long STEERING_PULSE_DURATION = 5;  // Length of each pulse (ms) org 20
+const unsigned long STEERING_PULSE_INTERVAL = 100; // Increase interval to reduce oscillation (was 30)
+const unsigned long STEERING_PULSE_DURATION = 20;  // Increase duration for smoother operation (was 5)
 bool isSteeringPulseActive = false;
 
 // LED variables

@@ -2,55 +2,63 @@
 
 SteeringController::SteeringController() {}
 
-void SteeringController::initialize() {
+void SteeringController::initialize()
+{
     pinMode(STEERING_A3_PIN, OUTPUT);
     pinMode(STEERING_A4_PIN, OUTPUT);
     digitalWrite(STEERING_A3_PIN, LOW);
     digitalWrite(STEERING_A4_PIN, LOW);
 }
 
-void SteeringController::handlePulseTiming() {
-    unsigned long currentTime = millis();
-    
-    if (currentTime - lastPulseTime > STEERING_PULSE_INTERVAL) {
-        isPulseActive = true;
-        lastPulseTime = currentTime;
-    } else if (currentTime - lastPulseTime > STEERING_PULSE_DURATION) {
-        isPulseActive = false;
+void SteeringController::control(int angle)
+{
+    int targetLeftPower = 0;
+    int targetRightPower = 0;
+
+    // Center deadzone - stop steering
+    if (angle >= ANGLE_DEADZONE_MIN && angle <= ANGLE_DEADZONE_MAX)
+    {
+        targetLeftPower = 0;
+        targetRightPower = 0;
     }
+    // Left steering (angle < center)
+    else if (angle < ANGLE_DEADZONE_MIN)
+    {
+        targetLeftPower = 0; // Stop right motor
+
+        if (angle < MAX_LEFT)
+        {
+            // Maximum left steering
+            targetRightPower = MAX_ANGLE;
+        }
+        else
+        {
+            // Proportional left steering
+            targetRightPower = map(angle, MAX_LEFT, ANGLE_DEADZONE_MIN, MAX_ANGLE, 0);
+        }
+    }
+    // Right steering (angle > center)
+    else if (angle > ANGLE_DEADZONE_MAX)
+    {
+        targetRightPower = 0; // Stop left motor
+
+        if (angle > MAX_RIGHT)
+        {
+            // Maximum right steering
+            targetLeftPower = MAX_ANGLE;
+        }
+        else
+        {
+            // Proportional right steering
+            targetLeftPower = map(angle, ANGLE_DEADZONE_MAX, MAX_RIGHT, 0, MAX_ANGLE);
+        }
+    }
+
+    // Apply smoothing for more responsive control
+    lastLeftPower = (int)(SMOOTHING_FACTOR * targetLeftPower + (1.0 - SMOOTHING_FACTOR) * lastLeftPower);
+    lastRightPower = (int)(SMOOTHING_FACTOR * targetRightPower + (1.0 - SMOOTHING_FACTOR) * lastRightPower);
+
+    // Apply the smoothed values
+    analogWrite(STEERING_A3_PIN, lastLeftPower);
+    analogWrite(STEERING_A4_PIN, lastRightPower);
 }
-
-void SteeringController::control(int angle) {
-    handlePulseTiming();
-
-    if (angle >= ANGLE_DEADZONE_MIN && angle <= ANGLE_DEADZONE_MAX) {
-        analogWrite(STEERING_A3_PIN, 0);
-        analogWrite(STEERING_A4_PIN, 0);
-        return;
-    }
-
-    if (!isPulseActive) {
-        analogWrite(STEERING_A3_PIN, 0);
-        analogWrite(STEERING_A4_PIN, 0);
-        return;
-    }
-
-    if (angle < MAX_LEFT) {
-        analogWrite(STEERING_A3_PIN, 0);
-        analogWrite(STEERING_A4_PIN, MAX_ANGLE);
-    }
-    else if (angle < ANGLE_DEADZONE_MIN) {
-        int power = map(angle, MAX_LEFT, ANGLE_DEADZONE_MIN, MAX_ANGLE, MAX_ANGLE * 0.4);
-        analogWrite(STEERING_A3_PIN, 0);
-        analogWrite(STEERING_A4_PIN, power);
-    }
-    else if (angle > MAX_RIGHT) {
-        analogWrite(STEERING_A3_PIN, MAX_ANGLE);
-        analogWrite(STEERING_A4_PIN, 0);
-    }
-    else if (angle > ANGLE_DEADZONE_MAX) {
-        int power = map(angle, ANGLE_DEADZONE_MAX, MAX_RIGHT, MAX_ANGLE * 0.4, MAX_ANGLE);
-        analogWrite(STEERING_A3_PIN, power);
-        analogWrite(STEERING_A4_PIN, 0);
-    }
-} 

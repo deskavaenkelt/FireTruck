@@ -16,6 +16,12 @@ SteeringService steeringService;
 byte lastThrottle = 127; // Default to middle (stop) position
 unsigned long lastReceiveTime = 0;
 const unsigned long FailsafeTimeout = 1000; // 1 second timeout
+unsigned long lastDebugTime = 0;
+const unsigned long DEBUG_INTERVAL = 500; // Debug output every 500ms
+const unsigned long LOOP_INTERVAL = 10;   // 100Hz update rate for receiver
+unsigned long lastLoopTime = 0;
+unsigned long lastButtonTransmitTime = 0;
+const unsigned long BUTTON_TRANSMIT_INTERVAL = 50; // Only transmit button state every 50ms
 
 // Funktionsdeklarationer
 void initializeRadio();
@@ -32,7 +38,8 @@ void checkFailsafe();
 void blinkBlueLeds();
 void blinkWhiteLeds();
 
-void setup() {
+void setup()
+{
     Serial.begin(SERIAL_SPEED);
     initializeRadio();
     motorController.initialize();
@@ -43,16 +50,31 @@ void setup() {
     lastReceiveTime = millis();
 }
 
-void loop() {
+void loop()
+{
+    // Always check for radio data to minimize latency
     receiveData();
-    int filteredAngle = steeringService.filterJitter(data.steeringAngle);
-    steeringService.control(filteredAngle);
-    motorController.control(lastThrottle);
-    readButtonState();
-    transmitButtonState();
-    checkFailsafe();
-    blinkBlueLeds();
-    blinkWhiteLeds();
+
+    unsigned long currentTime = millis();
+    if (currentTime - lastLoopTime >= LOOP_INTERVAL)
+    {
+        int filteredAngle = steeringService.filterJitter(data.steeringAngle);
+        steeringController.control(filteredAngle); // Use steeringController instead of steeringService
+        motorController.control(lastThrottle);
+        readButtonState();
+
+        // Only transmit button state occasionally to reduce radio conflicts
+        if (currentTime - lastButtonTransmitTime >= BUTTON_TRANSMIT_INTERVAL)
+        {
+            transmitButtonState();
+            lastButtonTransmitTime = currentTime;
+        }
+
+        checkFailsafe();
+        blinkBlueLeds();
+        blinkWhiteLeds();
+        lastLoopTime = currentTime;
+    }
 }
 
 void initializeRadio()
@@ -60,6 +82,8 @@ void initializeRadio()
     radio.begin();
     radio.setPALevel(RF24_PA_MIN);
     radio.setDataRate(RF24_2MBPS);          // Öka dataöverföringshastigheten
+    radio.setChannel(76);                   // Use same channel as transmitter
+    radio.setRetries(1, 1);                 // Reduce retries for faster response
     radio.openWritingPipe(addresses[0]);    // 00001
     radio.openReadingPipe(1, addresses[1]); // 00002
     radio.startListening();
@@ -102,7 +126,13 @@ void receiveData()
     }
     else
     {
-        Serial.println("Waiting for the transmitter...");
+        // Only print waiting message occasionally to reduce serial spam
+        unsigned long currentTime = millis();
+        if (currentTime - lastDebugTime >= DEBUG_INTERVAL)
+        {
+            Serial.println("Waiting for the transmitter...");
+            lastDebugTime = currentTime;
+        }
     }
 }
 
@@ -111,9 +141,10 @@ void controlServos()
     int angle = data.steeringAngle;
     int MAX_ANGLE = 127;
     unsigned long currentTime = millis();
-    
+
     // Center deadzone - completely off
-    if (angle >= 120 && angle <= 134) {
+    if (angle >= 120 && angle <= 134)
+    {
         analogWrite(STEERING_A3_PIN, 0);
         analogWrite(STEERING_A4_PIN, 0);
         isSteeringPulseActive = false;
@@ -151,8 +182,9 @@ void readButtonState()
 void transmitButtonState()
 {
     radio.stopListening();                    // Stoppa mottagning
-    delay(2);                                 // Minska fördröjningen till 2ms
+    delayMicroseconds(200);                   // Increase delay to ensure radio is ready
     radio.write(&data, sizeof(Data_Package)); // Skicka hela data-paketet
+    delayMicroseconds(200);                   // Increase delay before switching back
     radio.startListening();                   // Återgå till mottagning
 }
 
@@ -171,9 +203,11 @@ void debugButtonState()
     Serial.println(data.buttonState);
 }
 
-void blinkBlueLeds() {
+void blinkBlueLeds()
+{
     unsigned long currentTime = millis();
-    if (currentTime - lastBlueLedUpdate >= BLUE_BLINK_INTERVAL) {
+    if (currentTime - lastBlueLedUpdate >= BLUE_BLINK_INTERVAL)
+    {
         blueLedState = !blueLedState;
         digitalWrite(BLUE_LED_PIN_1, blueLedState);
         digitalWrite(BLUE_LED_PIN_2, blueLedState);
@@ -181,9 +215,11 @@ void blinkBlueLeds() {
     }
 }
 
-void blinkWhiteLeds() {
+void blinkWhiteLeds()
+{
     unsigned long currentTime = millis();
-    if (currentTime - lastWhiteLedUpdate >= WHITE_BLINK_INTERVAL) {
+    if (currentTime - lastWhiteLedUpdate >= WHITE_BLINK_INTERVAL)
+    {
         whiteLedState = !whiteLedState;
         digitalWrite(WHITE_LED_PIN_3, whiteLedState);
         digitalWrite(WHITE_LED_PIN_4, whiteLedState);
