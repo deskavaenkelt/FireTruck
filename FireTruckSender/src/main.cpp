@@ -10,6 +10,12 @@ int SERIAL_SPEED = 9600;
 const unsigned long LOOP_INTERVAL = 10; // Increase to 100Hz for better responsiveness
 unsigned long lastLoopTime = 0;
 
+// Debug filtering variables - same as receiver
+const unsigned long DEBUG_INTERVAL = 500; // Debug output every 500ms
+unsigned long lastDebugTime = 0;
+unsigned long lastFailDebugTime = 0;
+unsigned long lastSuccessDebugTime = 0;
+
 int BYTE_MIN_RANGE = 0;
 int BYTE_MAX_RANGE = 255;
 
@@ -27,13 +33,13 @@ Data_Package data; // Create a variable with the above structure
 
 // Funktionsdeklarationer
 void initializeRadio();
-void readInputValues();
+void readInputValues(bool shouldDebug);
 void transmitData();
 void receiveData();
 int readAndMapSteering();
 int readAndMapThrottle();
 long get_byte_value(int throttleValue);
-void setButtonState();
+void setButtonState(bool shouldDebug);
 int servoJitterFilter(int angle);
 
 void setup()
@@ -63,13 +69,24 @@ void loop()
   unsigned long currentTime = millis();
   if (currentTime - lastLoopTime >= LOOP_INTERVAL)
   {
-    Serial.println("\n=== TRANSMITTER LOOP START ===");
-    readInputValues();
+    // Only print loop debug messages occasionally to reduce serial spam
+    bool shouldDebug = (currentTime - lastDebugTime >= DEBUG_INTERVAL);
+    if (shouldDebug)
+    {
+      Serial.println("\n=== TRANSMITTER LOOP START ===");
+      lastDebugTime = currentTime;
+    }
+
+    readInputValues(shouldDebug);
     transmitData();
     receiveData();
-    setButtonState();
-    Serial.println("=== TRANSMITTER LOOP END ===");
-    Serial.flush();
+    setButtonState(shouldDebug);
+
+    if (shouldDebug)
+    {
+      Serial.println("=== TRANSMITTER LOOP END ===");
+      Serial.flush();
+    }
     lastLoopTime = currentTime;
   }
   // Small delay to prevent overwhelming the system
@@ -118,14 +135,17 @@ int readAndMapAnalogInput(int pin)
   return byteValue;
 }
 
-void readInputValues()
+void readInputValues(bool shouldDebug)
 {
   data.steeringAngle = readAndMapAnalogInput(STEERING_PIN);
   data.throttle = readAndMapAnalogInput(THROTTLE_PIN);
-  Serial.print("        Sending: Angle Value: ");
-  Serial.print(data.steeringAngle);
-  Serial.print(" | Throttle Value: ");
-  Serial.println(data.throttle);
+  if (shouldDebug)
+  {
+    Serial.print("        Sending: Angle Value: ");
+    Serial.print(data.steeringAngle);
+    Serial.print(" | Throttle Value: ");
+    Serial.println(data.throttle);
+  }
 }
 
 void transmitData()
@@ -133,13 +153,25 @@ void transmitData()
   radio.stopListening();
   delayMicroseconds(200); // Increase delay to ensure radio is ready
   bool success = radio.write(&data, sizeof(Data_Package));
+  unsigned long currentTime = millis();
+
   if (success)
   {
-    Serial.println("Data sent successfully");
+    // Only print success message occasionally to reduce serial spam
+    if (currentTime - lastSuccessDebugTime >= DEBUG_INTERVAL)
+    {
+      Serial.println("Data sent successfully");
+      lastSuccessDebugTime = currentTime;
+    }
   }
   else
   {
-    Serial.println("Data send failed");
+    // Only print failure message occasionally to reduce serial spam
+    if (currentTime - lastFailDebugTime >= DEBUG_INTERVAL)
+    {
+      Serial.println("Data send failed");
+      lastFailDebugTime = currentTime;
+    }
   }
   delayMicroseconds(200); // Add delay before switching back
 }
@@ -159,9 +191,12 @@ void receiveData()
   }
 }
 
-void setButtonState()
+void setButtonState(bool shouldDebug)
 {
-  Serial.print("Received Button State: ");
-  Serial.println(data.buttonState);
+  if (shouldDebug)
+  {
+    Serial.print("Received Button State: ");
+    Serial.println(data.buttonState);
+  }
   digitalWrite(LED_PIN, data.buttonState ? HIGH : LOW);
 }
