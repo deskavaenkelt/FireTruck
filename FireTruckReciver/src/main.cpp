@@ -37,7 +37,7 @@ int servoJitterFilter(int angle);
 void checkFailsafe();
 void blinkBlueLeds();
 void blinkWhiteLeds(int filteredAngle);
-// void controlSmartHeadlights(int filteredAngle);
+void controlSmartHeadlights(int filteredAngle);
 
 void setup()
 {
@@ -242,37 +242,64 @@ void debugButtonState()
 void blinkBlueLeds()
 {
     unsigned long currentTime = millis();
-    if (currentTime - lastBlueLedUpdate >= BLUE_BLINK_INTERVAL)
+
+    // Determine if vehicle is moving
+    bool isMoving = (lastThrottle < 119 || lastThrottle > 135); // Moving forward or backward
+
+    // Different blink intervals based on movement
+    unsigned long blinkInterval;
+    if (isMoving)
     {
-        blueLedState = !blueLedState;
-        digitalWrite(BLUE_LED_PIN_1, blueLedState);
-        digitalWrite(BLUE_LED_PIN_2, blueLedState);
-        Serial.print("Blue LEDs: ");
-        Serial.println(blueLedState ? "HIGH" : "LOW");
+        blinkInterval = 150; // Fast blink when moving (150ms = ~3.3Hz)
+    }
+    else
+    {
+        blinkInterval = BLUE_BLINK_INTERVAL; // Slow blink when stationary (500ms = 1Hz)
+    }
+
+    if (currentTime - lastBlueLedUpdate >= blinkInterval)
+    {
+        if (isMoving)
+        {
+            // Bistable flip-flop behavior when moving - alternate between LEDs
+            static bool flipFlopState = false;
+            flipFlopState = !flipFlopState;
+
+            if (flipFlopState)
+            {
+                digitalWrite(BLUE_LED_PIN_1, HIGH); // Left LED on
+                digitalWrite(BLUE_LED_PIN_2, LOW);  // Right LED off
+            }
+            else
+            {
+                digitalWrite(BLUE_LED_PIN_1, LOW);  // Left LED off
+                digitalWrite(BLUE_LED_PIN_2, HIGH); // Right LED on
+            }
+
+            Serial.print("Blue LEDs (MOVING): ");
+            Serial.println(flipFlopState ? "LEFT" : "RIGHT");
+        }
+        else
+        {
+            // Normal synchronized blinking when stationary
+            blueLedState = !blueLedState;
+            digitalWrite(BLUE_LED_PIN_1, blueLedState);
+            digitalWrite(BLUE_LED_PIN_2, blueLedState);
+
+            Serial.print("Blue LEDs (STATIONARY): ");
+            Serial.println(blueLedState ? "HIGH" : "LOW");
+        }
+
         lastBlueLedUpdate = currentTime;
     }
 }
 
 void blinkWhiteLeds(int filteredAngle)
 {
-    // Temporarily disable smart headlights - revert to simple blinking
-    unsigned long currentTime = millis();
-    if (currentTime - lastWhiteLedUpdate >= WHITE_BLINK_INTERVAL)
-    {
-        whiteLedState = !whiteLedState;
-        digitalWrite(WHITE_LED_PIN_3, whiteLedState);
-        digitalWrite(WHITE_LED_PIN_4, whiteLedState);
-        Serial.print("White LEDs: ");
-        Serial.print(whiteLedState ? "HIGH" : "LOW");
-        Serial.print(" | Throttle: ");
-        Serial.print(lastThrottle);
-        Serial.print(" | Angle: ");
-        Serial.println(filteredAngle);
-        lastWhiteLedUpdate = currentTime;
-    }
+    // Smart headlight system based on throttle and steering
+    controlSmartHeadlights(filteredAngle);
 }
 
-/*
 void controlSmartHeadlights(int filteredAngle)
 {
     // Safety check - ensure we have received valid data
@@ -287,6 +314,7 @@ void controlSmartHeadlights(int filteredAngle)
     unsigned long currentTime = millis();
     static unsigned long lastBlinkTime = 0;
     static bool blinkState = false;
+    static unsigned long lastDebugTime = 0;
     const unsigned long BLINK_INTERVAL = 500; // 500ms blink interval for turn signals
 
     // Determine vehicle state
@@ -304,6 +332,32 @@ void controlSmartHeadlights(int filteredAngle)
     {
         blinkState = !blinkState;
         lastBlinkTime = currentTime;
+    }
+
+    // Debug output every 500ms
+    if (currentTime - lastDebugTime >= DEBUG_INTERVAL)
+    {
+        Serial.print("SMART LEDs: ");
+        if (isStill)
+            Serial.print("STILL");
+        else if (isMovingForward)
+            Serial.print("FORWARD");
+        else if (isMovingBackward)
+            Serial.print("BACKWARD");
+
+        Serial.print(" | ");
+        if (isStraight)
+            Serial.print("STRAIGHT");
+        else if (isTurningLeft)
+            Serial.print("LEFT");
+        else if (isTurningRight)
+            Serial.print("RIGHT");
+
+        Serial.print(" | Throttle: ");
+        Serial.print(lastThrottle);
+        Serial.print(" | Angle: ");
+        Serial.println(filteredAngle);
+        lastDebugTime = currentTime;
     }
 
     // Control logic
@@ -356,4 +410,3 @@ void controlSmartHeadlights(int filteredAngle)
         }
     }
 }
-*/
