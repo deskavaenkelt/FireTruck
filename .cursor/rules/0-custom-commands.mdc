@@ -1,0 +1,17 @@
+---
+description:
+globs:
+alwaysApply: false
+---
+`-question`
+- Analysera problem och ger detaljerad förklaring.
+- Fokusera pả problemförståelse.
+- Ange vilka mappar i projektet du tror är mest relevanta.
+- Ändra ingen kod.
+- Ställ frägor till användaren för förstå uppgiften bättre.
+
+`-steps`
+- Use Chain-of-Draft: Think step by step, but only keep a minimum draft for each thinking step, with 5 words at most. Return the answer at the end of the response after a separator ####.
+
+`-impl`
+- Implementera ditt förslag.

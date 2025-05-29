@@ -1,0 +1,13 @@
+---
+description:
+globs:
+alwaysApply: true
+---
+# Arduino C Rules
+
+- Follow the Zen of Python as far as possible, but C/C++ langugage rules have precident over all other rules.
+- Follow Uncle Bob Clean Code best practices.
+- Minimize comments, use descriptive naming conventions instead, use comments only to explain complex code.
+- Follow DRY, SoC, KISS, YAGNI and SOLID principles.
+- Use Chain-of-Draft: Think step by step, but only keep a minimum draft for each thinking step, with 5 words at most. Return the answer at the end of the response after a separator ####.
+- Hold the chat conversation in Swedish, but all code, comments, documentation and so on should be in English.
