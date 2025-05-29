@@ -2,7 +2,7 @@
 #define PINS_H
 
 // PIN DEFINITIONS FOR ARDUINO MEGA 2560
-// Don't use pins 0, 1 (Serial) and 4
+// Don't use pins 0, 1 (Serial)
 // Digital pins:
 #define WHITE_LED_PIN_3 22 // Changed from 7 (conflicts with nRF24L01 CE)
 #define WHITE_LED_PIN_4 23 // Changed from 8 (conflicts with nRF24L01 CSN)
@@ -21,7 +21,7 @@
 #endif
 
 // ARDUINO MEGA 2560 PIN USAGE:
-// Dead Pins: 4
+// Dead Pins: None
 // nRF24L01 pins: 7 (CE), 8 (CSN), 11 (MOSI), 12 (MISO), 13 (SCK)
 // Used Digital Pins: 2,3 (Blue LEDs), 5,6 (Throttle), 9,10 (Steering), 22,23 (White LEDs)
 // Used Analog Pins: A0 (button), A1 (voltage sensing)

@@ -10,8 +10,8 @@ int SERIAL_SPEED = 9600;
 const unsigned long LOOP_INTERVAL = 10; // Increase to 100Hz for better responsiveness
 unsigned long lastLoopTime = 0;
 
-// Debug filtering variables - same as receiver
-const unsigned long DEBUG_INTERVAL = 500; // Debug output every 500ms
+// Debug filtering variables - optimized for minimal latency
+const unsigned long DEBUG_INTERVAL = 2000; // Debug output every 2 seconds (reduced from 500ms)
 unsigned long lastDebugTime = 0;
 unsigned long lastFailDebugTime = 0;
 unsigned long lastSuccessDebugTime = 0;

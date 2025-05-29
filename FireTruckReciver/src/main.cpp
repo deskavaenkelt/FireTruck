@@ -153,10 +153,19 @@ void receiveData()
     if (radio.available())
     {
         radio.read(&data, sizeof(Data_Package)); // Läs hela data och lagra den i 'data'-strukturen
-        Serial.print("---------------------- Received Angle Value: ");
-        Serial.print(data.steeringAngle);
-        Serial.print(" | Received Throttle Value: ");
-        Serial.println(data.throttle);
+
+        // Reduce debug output frequency to minimize serial spam
+        static unsigned long lastReceiveDebug = 0;
+        unsigned long currentTime = millis();
+        if (currentTime - lastReceiveDebug >= 1000) // Only every 1 second
+        {
+            Serial.print("---------------------- Received Angle Value: ");
+            Serial.print(data.steeringAngle);
+            Serial.print(" | Received Throttle Value: ");
+            Serial.println(data.throttle);
+            lastReceiveDebug = currentTime;
+        }
+
         lastThrottle = data.throttle; // Update last valid throttle value
         lastReceiveTime = millis();   // Update last receive time
     }
@@ -276,8 +285,14 @@ void blinkBlueLeds()
                 digitalWrite(BLUE_LED_PIN_2, HIGH); // Right LED on
             }
 
-            Serial.print("Blue LEDs (MOVING): ");
-            Serial.println(flipFlopState ? "LEFT" : "RIGHT");
+            // Reduce debug output frequency when moving
+            static unsigned long lastMovingDebug = 0;
+            if (currentTime - lastMovingDebug >= 1000) // Only every 1 second when moving
+            {
+                Serial.print("Blue LEDs (MOVING): ");
+                Serial.println(flipFlopState ? "LEFT" : "RIGHT");
+                lastMovingDebug = currentTime;
+            }
         }
         else
         {
@@ -286,8 +301,14 @@ void blinkBlueLeds()
             digitalWrite(BLUE_LED_PIN_1, blueLedState);
             digitalWrite(BLUE_LED_PIN_2, blueLedState);
 
-            Serial.print("Blue LEDs (STATIONARY): ");
-            Serial.println(blueLedState ? "HIGH" : "LOW");
+            // Less frequent debug when stationary
+            static unsigned long lastStationaryDebug = 0;
+            if (currentTime - lastStationaryDebug >= 2000) // Only every 2 seconds when stationary
+            {
+                Serial.print("Blue LEDs (STATIONARY): ");
+                Serial.println(blueLedState ? "HIGH" : "LOW");
+                lastStationaryDebug = currentTime;
+            }
         }
 
         lastBlueLedUpdate = currentTime;
@@ -334,8 +355,8 @@ void controlSmartHeadlights(int filteredAngle)
         lastBlinkTime = currentTime;
     }
 
-    // Debug output every 500ms
-    if (currentTime - lastDebugTime >= DEBUG_INTERVAL)
+    // Debug output every 2 seconds instead of 500ms to reduce serial spam
+    if (currentTime - lastDebugTime >= 2000)
     {
         Serial.print("SMART LEDs: ");
         if (isStill)
