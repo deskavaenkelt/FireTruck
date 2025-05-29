@@ -95,7 +95,17 @@ void loop()
 
 void initializeRadio()
 {
+  Serial.println("=== SENDER RADIO DEBUG: Initializing radio ===");
   radio.begin();
+
+  // Check if radio is connected
+  if (!radio.isChipConnected())
+  {
+    Serial.println("ERROR: nRF24L01 not connected!");
+    return;
+  }
+  Serial.println("nRF24L01 chip connected successfully");
+
   radio.setPALevel(RF24_PA_MIN);
   radio.setDataRate(RF24_2MBPS);          // Öka dataöverföringshastigheten
   radio.setChannel(76);                   // Use a specific channel to avoid interference
@@ -105,6 +115,15 @@ void initializeRadio()
   radio.stopListening();
   radio.flush_tx();
   radio.flush_rx();
+
+  Serial.println("Sender Radio configuration:");
+  Serial.print("Channel: ");
+  Serial.println(radio.getChannel());
+  Serial.print("Data Rate: ");
+  Serial.println(radio.getDataRate());
+  Serial.print("PA Level: ");
+  Serial.println(radio.getPALevel());
+  Serial.println("=== SENDER RADIO DEBUG: Initialization complete ===");
 }
 
 int removeInputJitter(int input)

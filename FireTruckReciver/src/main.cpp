@@ -36,7 +36,8 @@ void debugButtonState();
 int servoJitterFilter(int angle);
 void checkFailsafe();
 void blinkBlueLeds();
-void blinkWhiteLeds();
+void blinkWhiteLeds(int filteredAngle);
+// void controlSmartHeadlights(int filteredAngle);
 
 void setup()
 {
@@ -46,6 +47,18 @@ void setup()
     steeringController.initialize();
     initializeButton();
     initializeLEDs();
+
+    // 5-second startup indication with white LEDs
+    Serial.println("=== LED DEBUG: Setting white LEDs HIGH for startup ===");
+    digitalWrite(WHITE_LED_PIN_3, HIGH);
+    digitalWrite(WHITE_LED_PIN_4, HIGH);
+    Serial.println("White LEDs should be ON now for 5 seconds...");
+    delay(5000); // 5 seconds
+    Serial.println("=== LED DEBUG: Setting white LEDs LOW after startup ===");
+    digitalWrite(WHITE_LED_PIN_3, LOW);
+    digitalWrite(WHITE_LED_PIN_4, LOW);
+    Serial.println("White LEDs should be OFF now");
+
     Serial.println("Receiver Ready");
     lastReceiveTime = millis();
 }
@@ -72,14 +85,24 @@ void loop()
 
         checkFailsafe();
         blinkBlueLeds();
-        blinkWhiteLeds();
+        blinkWhiteLeds(filteredAngle);
         lastLoopTime = currentTime;
     }
 }
 
 void initializeRadio()
 {
+    Serial.println("=== RADIO DEBUG: Initializing radio ===");
     radio.begin();
+
+    // Check if radio is connected
+    if (!radio.isChipConnected())
+    {
+        Serial.println("ERROR: nRF24L01 not connected!");
+        return;
+    }
+    Serial.println("nRF24L01 chip connected successfully");
+
     radio.setPALevel(RF24_PA_MIN);
     radio.setDataRate(RF24_2MBPS);          // Öka dataöverföringshastigheten
     radio.setChannel(76);                   // Use same channel as transmitter
@@ -89,6 +112,15 @@ void initializeRadio()
     radio.startListening();
     radio.flush_tx();
     radio.flush_rx();
+
+    Serial.println("Radio configuration:");
+    Serial.print("Channel: ");
+    Serial.println(radio.getChannel());
+    Serial.print("Data Rate: ");
+    Serial.println(radio.getDataRate());
+    Serial.print("PA Level: ");
+    Serial.println(radio.getPALevel());
+    Serial.println("=== RADIO DEBUG: Initialization complete ===");
 }
 
 // void initializeServos() {
@@ -106,10 +138,14 @@ void initializeLEDs()
     pinMode(BLUE_LED_PIN_2, OUTPUT);
     pinMode(WHITE_LED_PIN_3, OUTPUT);
     pinMode(WHITE_LED_PIN_4, OUTPUT);
+
+    Serial.println("=== LED DEBUG: Initializing LEDs ===");
+    Serial.println("Setting all LEDs to HIGH during initialization");
     digitalWrite(BLUE_LED_PIN_1, HIGH);
     digitalWrite(BLUE_LED_PIN_2, HIGH);
     digitalWrite(WHITE_LED_PIN_3, HIGH);
     digitalWrite(WHITE_LED_PIN_4, HIGH);
+    Serial.println("All LEDs set to HIGH - they should be ON if wired correctly");
 }
 
 void receiveData()
@@ -211,18 +247,113 @@ void blinkBlueLeds()
         blueLedState = !blueLedState;
         digitalWrite(BLUE_LED_PIN_1, blueLedState);
         digitalWrite(BLUE_LED_PIN_2, blueLedState);
+        Serial.print("Blue LEDs: ");
+        Serial.println(blueLedState ? "HIGH" : "LOW");
         lastBlueLedUpdate = currentTime;
     }
 }
 
-void blinkWhiteLeds()
+void blinkWhiteLeds(int filteredAngle)
 {
+    // Temporarily disable smart headlights - revert to simple blinking
     unsigned long currentTime = millis();
     if (currentTime - lastWhiteLedUpdate >= WHITE_BLINK_INTERVAL)
     {
         whiteLedState = !whiteLedState;
         digitalWrite(WHITE_LED_PIN_3, whiteLedState);
         digitalWrite(WHITE_LED_PIN_4, whiteLedState);
+        Serial.print("White LEDs: ");
+        Serial.print(whiteLedState ? "HIGH" : "LOW");
+        Serial.print(" | Throttle: ");
+        Serial.print(lastThrottle);
+        Serial.print(" | Angle: ");
+        Serial.println(filteredAngle);
         lastWhiteLedUpdate = currentTime;
     }
 }
+
+/*
+void controlSmartHeadlights(int filteredAngle)
+{
+    // Safety check - ensure we have received valid data
+    if (millis() - lastReceiveTime > FailsafeTimeout)
+    {
+        // No valid data - turn off all lights
+        digitalWrite(WHITE_LED_PIN_3, LOW);
+        digitalWrite(WHITE_LED_PIN_4, LOW);
+        return;
+    }
+
+    unsigned long currentTime = millis();
+    static unsigned long lastBlinkTime = 0;
+    static bool blinkState = false;
+    const unsigned long BLINK_INTERVAL = 500; // 500ms blink interval for turn signals
+
+    // Determine vehicle state
+    bool isMovingForward = (lastThrottle > 135);                 // Forward threshold
+    bool isMovingBackward = (lastThrottle < 119);                // Backward threshold
+    bool isStill = (lastThrottle >= 119 && lastThrottle <= 135); // Still/neutral
+
+    // Determine steering state
+    bool isTurningLeft = (filteredAngle < 120);
+    bool isTurningRight = (filteredAngle > 134);
+    bool isStraight = (filteredAngle >= 120 && filteredAngle <= 134);
+
+    // Update blink state for turn signals
+    if (currentTime - lastBlinkTime >= BLINK_INTERVAL)
+    {
+        blinkState = !blinkState;
+        lastBlinkTime = currentTime;
+    }
+
+    // Control logic
+    if (isStill)
+    {
+        // Standing still - all lights off
+        digitalWrite(WHITE_LED_PIN_3, LOW); // Left LED off
+        digitalWrite(WHITE_LED_PIN_4, LOW); // Right LED off
+    }
+    else if (isMovingForward)
+    {
+        if (isStraight)
+        {
+            // Moving forward straight - both headlights on constant
+            digitalWrite(WHITE_LED_PIN_3, HIGH); // Left LED on
+            digitalWrite(WHITE_LED_PIN_4, HIGH); // Right LED on
+        }
+        else if (isTurningLeft)
+        {
+            // Moving forward + turning left - left blinks, right constant
+            digitalWrite(WHITE_LED_PIN_3, blinkState ? HIGH : LOW); // Left LED blinks
+            digitalWrite(WHITE_LED_PIN_4, HIGH);                    // Right LED constant
+        }
+        else if (isTurningRight)
+        {
+            // Moving forward + turning right - right blinks, left constant
+            digitalWrite(WHITE_LED_PIN_3, HIGH);                    // Left LED constant
+            digitalWrite(WHITE_LED_PIN_4, blinkState ? HIGH : LOW); // Right LED blinks
+        }
+    }
+    else if (isMovingBackward)
+    {
+        if (isStraight)
+        {
+            // Moving backward straight - all lights off (no reverse lights implemented)
+            digitalWrite(WHITE_LED_PIN_3, LOW); // Left LED off
+            digitalWrite(WHITE_LED_PIN_4, LOW); // Right LED off
+        }
+        else if (isTurningLeft)
+        {
+            // Moving backward + turning left - left blinks, right off
+            digitalWrite(WHITE_LED_PIN_3, blinkState ? HIGH : LOW); // Left LED blinks
+            digitalWrite(WHITE_LED_PIN_4, LOW);                     // Right LED off
+        }
+        else if (isTurningRight)
+        {
+            // Moving backward + turning right - right blinks, left off
+            digitalWrite(WHITE_LED_PIN_3, LOW);                     // Left LED off
+            digitalWrite(WHITE_LED_PIN_4, blinkState ? HIGH : LOW); // Right LED blinks
+        }
+    }
+}
+*/
