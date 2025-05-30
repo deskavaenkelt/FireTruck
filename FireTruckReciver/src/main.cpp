@@ -52,12 +52,16 @@ void setup()
     Serial.println("=== LED DEBUG: Setting white LEDs HIGH for startup ===");
     digitalWrite(WHITE_LED_PIN_3, HIGH);
     digitalWrite(WHITE_LED_PIN_4, HIGH);
-    Serial.println("White LEDs should be ON now for 5 seconds...");
+    digitalWrite(RED_LED_PIN_1, HIGH);
+    digitalWrite(RED_LED_PIN_2, HIGH);
+    Serial.println("White and Red LEDs should be ON now for 5 seconds...");
     delay(5000); // 5 seconds
-    Serial.println("=== LED DEBUG: Setting white LEDs LOW after startup ===");
+    Serial.println("=== LED DEBUG: Setting white and red LEDs LOW after startup ===");
     digitalWrite(WHITE_LED_PIN_3, LOW);
     digitalWrite(WHITE_LED_PIN_4, LOW);
-    Serial.println("White LEDs should be OFF now");
+    digitalWrite(RED_LED_PIN_1, LOW);
+    digitalWrite(RED_LED_PIN_2, LOW);
+    Serial.println("White and Red LEDs should be OFF now");
 
     Serial.println("Receiver Ready");
     lastReceiveTime = millis();
@@ -138,6 +142,8 @@ void initializeLEDs()
     pinMode(BLUE_LED_PIN_2, OUTPUT);
     pinMode(WHITE_LED_PIN_3, OUTPUT);
     pinMode(WHITE_LED_PIN_4, OUTPUT);
+    pinMode(RED_LED_PIN_1, OUTPUT);
+    pinMode(RED_LED_PIN_2, OUTPUT);
 
     Serial.println("=== LED DEBUG: Initializing LEDs ===");
     Serial.println("Setting all LEDs to HIGH during initialization");
@@ -145,6 +151,8 @@ void initializeLEDs()
     digitalWrite(BLUE_LED_PIN_2, HIGH);
     digitalWrite(WHITE_LED_PIN_3, HIGH);
     digitalWrite(WHITE_LED_PIN_4, HIGH);
+    digitalWrite(RED_LED_PIN_1, HIGH);
+    digitalWrite(RED_LED_PIN_2, HIGH);
     Serial.println("All LEDs set to HIGH - they should be ON if wired correctly");
 }
 
@@ -387,9 +395,15 @@ void controlSmartHeadlights(int filteredAngle)
         // Standing still - all lights off
         digitalWrite(WHITE_LED_PIN_3, LOW); // Left LED off
         digitalWrite(WHITE_LED_PIN_4, LOW); // Right LED off
+        digitalWrite(RED_LED_PIN_1, LOW);   // Red LEDs off
+        digitalWrite(RED_LED_PIN_2, LOW);
     }
     else if (isMovingForward)
     {
+        // Turn off red LEDs when moving forward
+        digitalWrite(RED_LED_PIN_1, LOW);
+        digitalWrite(RED_LED_PIN_2, LOW);
+
         if (isStraight)
         {
             // Moving forward straight - both headlights on constant
@@ -413,21 +427,27 @@ void controlSmartHeadlights(int filteredAngle)
     {
         if (isStraight)
         {
-            // Moving backward straight - all lights off (no reverse lights implemented)
+            // Moving backward straight - white lights off, red lights on constant
             digitalWrite(WHITE_LED_PIN_3, LOW); // Left LED off
             digitalWrite(WHITE_LED_PIN_4, LOW); // Right LED off
+            digitalWrite(RED_LED_PIN_1, HIGH);  // Red LEDs on constant
+            digitalWrite(RED_LED_PIN_2, HIGH);
         }
         else if (isTurningLeft)
         {
-            // Moving backward + turning left - left blinks, right off
-            digitalWrite(WHITE_LED_PIN_3, blinkState ? HIGH : LOW); // Left LED blinks
-            digitalWrite(WHITE_LED_PIN_4, LOW);                     // Right LED off
+            // Moving backward + turning left - left white blinks, left red blinks, right red constant
+            digitalWrite(WHITE_LED_PIN_3, blinkState ? HIGH : LOW); // Left white LED blinks
+            digitalWrite(WHITE_LED_PIN_4, LOW);                     // Right white LED off
+            digitalWrite(RED_LED_PIN_1, blinkState ? HIGH : LOW);   // Left red LED blinks (turn signal)
+            digitalWrite(RED_LED_PIN_2, HIGH);                      // Right red LED constant (reverse light)
         }
         else if (isTurningRight)
         {
-            // Moving backward + turning right - right blinks, left off
-            digitalWrite(WHITE_LED_PIN_3, LOW);                     // Left LED off
-            digitalWrite(WHITE_LED_PIN_4, blinkState ? HIGH : LOW); // Right LED blinks
+            // Moving backward + turning right - right white blinks, right red blinks, left red constant
+            digitalWrite(WHITE_LED_PIN_3, LOW);                     // Left white LED off
+            digitalWrite(WHITE_LED_PIN_4, blinkState ? HIGH : LOW); // Right white LED blinks
+            digitalWrite(RED_LED_PIN_1, HIGH);                      // Left red LED constant (reverse light)
+            digitalWrite(RED_LED_PIN_2, blinkState ? HIGH : LOW);   // Right red LED blinks (turn signal)
         }
     }
 }

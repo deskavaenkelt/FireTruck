@@ -8,6 +8,8 @@
 #define WHITE_LED_PIN_4 23 // Changed from 8 (conflicts with nRF24L01 CSN)
 #define BLUE_LED_PIN_1 24
 #define BLUE_LED_PIN_2 25
+#define RED_LED_PIN_1 26
+#define RED_LED_PIN_2 27
 #define DEAD_PIN_4 4
 #define THROTTLE_A1_PIN 6
 #define THROTTLE_A2_PIN 5
