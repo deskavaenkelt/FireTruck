@@ -10,10 +10,14 @@
 #include "battery_protection.h"
 #include "smart_led_controller.h"
 #include "radio_controller.h"
+#include "servo_test_controller.h"
+#include "steering_servo_controller.h"
 
 MotorController motorController;
-SteeringController steeringController;
+SteeringController steeringController;           // Keep for compatibility if needed
+SteeringServoController steeringServoController; // New servo-based steering
 SteeringService steeringService;
+ServoTestController servoTestController;
 
 // Variabler för Failsafe
 byte lastThrottle = 127; // Default to middle (stop) position
@@ -21,6 +25,10 @@ unsigned long lastReceiveTime = 0;
 const unsigned long FailsafeTimeout = 1000; // 1 second timeout
 const unsigned long LOOP_INTERVAL = 10;     // 100Hz update rate for receiver
 unsigned long lastLoopTime = 0;
+
+// Test mode flag - set to true to enable servo testing
+bool servoTestMode = true;    // Change to false to disable servo test
+bool useServoSteering = true; // Set to true to use servo steering instead of motor
 
 // Funktionsdeklarationer
 void initializeButton();
@@ -35,10 +43,28 @@ void setup()
     Serial.begin(SERIAL_SPEED);
     initializeRadio();
     motorController.initialize();
-    steeringController.initialize();
+
+    // Initialize steering system
+    if (useServoSteering)
+    {
+        steeringServoController.initialize();
+        Serial.println("Using SERVO steering system");
+    }
+    else
+    {
+        steeringController.initialize();
+        Serial.println("Using MOTOR steering system");
+    }
+
     initializeButton();
     initializeSmartLEDs();
     initializeBatteryProtection();
+
+    // Initialize servo test if enabled
+    if (servoTestMode)
+    {
+        servoTestController.initialize();
+    }
 
     // 5-second startup indication with white LEDs
     Serial.println("=== LED DEBUG: Setting white LEDs HIGH for startup ===");
@@ -56,6 +82,11 @@ void setup()
     Serial.println("White and Red LEDs should be OFF now");
 
     Serial.println("Receiver Ready");
+    if (servoTestMode)
+    {
+        Serial.println("SERVO TEST MODE ENABLED");
+        Serial.println("Connect potentiometer to A2 or use radio throttle");
+    }
     lastReceiveTime = millis();
 }
 
@@ -84,7 +115,15 @@ void loop()
             // Only control motors if battery protection is not active
             if (!isBatteryProtectionActive())
             {
-                steeringController.control(filteredAngle);
+                // Use servo steering or motor steering based on configuration
+                if (useServoSteering)
+                {
+                    steeringServoController.control(filteredAngle);
+                }
+                else
+                {
+                    steeringController.control(filteredAngle);
+                }
                 motorController.control(lastThrottle);
             }
 
@@ -100,6 +139,23 @@ void loop()
             checkFailsafe();
             blinkBlueLeds(lastThrottle);
             blinkWhiteLeds(filteredAngle, lastThrottle, lastReceiveTime, FailsafeTimeout);
+
+            // Servo test functionality
+            if (servoTestMode)
+            {
+                // Check if potentiometer is connected (reading > 10)
+                int potReading = analogRead(POTENTIOMETER_TEST_PIN);
+                if (potReading > 10)
+                {
+                    // Use potentiometer control
+                    servoTestController.updateFromPotentiometer();
+                }
+                else
+                {
+                    // Use radio throttle control
+                    servoTestController.updateFromRadio(lastThrottle);
+                }
+            }
         }
 
         lastLoopTime = currentTime;

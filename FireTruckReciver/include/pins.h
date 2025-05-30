@@ -20,6 +20,21 @@
 #define BUTTON_PIN 14        // A0 pin as digital pin A0-A5 = 14-19
 #define VOLTAGE_SENSE_PIN A1 // Voltage divider input for battery/PSU voltage sensing
 
+// Servo test pins:
+#define SERVO_TEST_PIN 3          // PWM pin for servo signal (free pin)
+#define POTENTIOMETER_TEST_PIN A2 // Analog pin for potentiometer test
+
+// Servo limits and steering servo:
+#define STEERING_SERVO_PIN 11  // PWM pin for steering servo (replacing motor)
+#define SERVO_MIN_ANGLE 24     // Minimum safe servo angle (just above dead zone)
+#define SERVO_MAX_ANGLE 180    // Maximum safe servo angle (full range)
+#define SERVO_CENTER_ANGLE 102 // Center position (24+180)/2 = 102 degrees
+
+// Servo range calculations:
+#define SERVO_TOTAL_RANGE (SERVO_MAX_ANGLE - SERVO_MIN_ANGLE)    // 156 degrees total
+#define SERVO_LEFT_RANGE (SERVO_CENTER_ANGLE - SERVO_MIN_ANGLE)  // 78 degrees left
+#define SERVO_RIGHT_RANGE (SERVO_MAX_ANGLE - SERVO_CENTER_ANGLE) // 78 degrees right
+
 #endif
 
 // ARDUINO MEGA 2560 PIN USAGE:
