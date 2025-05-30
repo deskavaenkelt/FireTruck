@@ -28,7 +28,6 @@ private:
     int maxRightPower = 255; // Keep high for weak right motor compensation
 
     // Voltage sensing
-    static const int VOLTAGE_SENSE_PIN = A1;        // Use A1 as defined in pins.h
     static const float VOLTAGE_DIVIDER_RATIO = 0.4; // For 15kΩ + 10kΩ: 10kΩ/(10kΩ+15kΩ) = 4.8V at 12V input
     static const float TARGET_VOLTAGE = 6.0;        // Target voltage for motors
     static const float ARDUINO_VREF = 5.0;          // Arduino UNO reference voltage

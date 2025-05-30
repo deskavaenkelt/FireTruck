@@ -8,6 +8,8 @@
 #include "steering_controller.h"
 #include "steering_service.h"
 #include "battery_protection.h"
+#include "smart_led_controller.h"
+#include "radio_controller.h"
 
 MotorController motorController;
 SteeringController steeringController;
@@ -17,28 +19,16 @@ SteeringService steeringService;
 byte lastThrottle = 127; // Default to middle (stop) position
 unsigned long lastReceiveTime = 0;
 const unsigned long FailsafeTimeout = 1000; // 1 second timeout
-unsigned long lastDebugTime = 0;
-const unsigned long DEBUG_INTERVAL = 500; // Debug output every 500ms
-const unsigned long LOOP_INTERVAL = 10;   // 100Hz update rate for receiver
+const unsigned long LOOP_INTERVAL = 10;     // 100Hz update rate for receiver
 unsigned long lastLoopTime = 0;
-unsigned long lastButtonTransmitTime = 0;
-const unsigned long BUTTON_TRANSMIT_INTERVAL = 50; // Only transmit button state every 50ms
 
 // Funktionsdeklarationer
-void initializeRadio();
-// void initializeServos();
 void initializeButton();
-void initializeLEDs();
-void receiveData();
 void controlServos();
 void readButtonState();
-void transmitButtonState();
-void debugButtonState();
 int servoJitterFilter(int angle);
 void checkFailsafe();
-void blinkBlueLeds();
-void blinkWhiteLeds(int filteredAngle);
-void controlSmartHeadlights(int filteredAngle);
+void debugButtonState();
 
 void setup()
 {
@@ -47,7 +37,7 @@ void setup()
     motorController.initialize();
     steeringController.initialize();
     initializeButton();
-    initializeLEDs();
+    initializeSmartLEDs();
     initializeBatteryProtection();
 
     // 5-second startup indication with white LEDs
@@ -72,7 +62,7 @@ void setup()
 void loop()
 {
     // Always check for radio data to minimize latency
-    receiveData();
+    receiveData(lastThrottle, lastReceiveTime);
 
     // Check battery voltage for protection
     checkBatteryVoltage();
@@ -108,114 +98,22 @@ void loop()
             }
 
             checkFailsafe();
-            blinkBlueLeds();
-            blinkWhiteLeds(filteredAngle);
+            blinkBlueLeds(lastThrottle);
+            blinkWhiteLeds(filteredAngle, lastThrottle, lastReceiveTime, FailsafeTimeout);
         }
 
         lastLoopTime = currentTime;
     }
 }
 
-void initializeRadio()
-{
-    Serial.println("=== RADIO DEBUG: Initializing radio ===");
-    radio.begin();
-
-    // Check if radio is connected
-    if (!radio.isChipConnected())
-    {
-        Serial.println("ERROR: nRF24L01 not connected!");
-        return;
-    }
-    Serial.println("nRF24L01 chip connected successfully");
-
-    radio.setPALevel(RF24_PA_MIN);
-    radio.setDataRate(RF24_2MBPS);          // Öka dataöverföringshastigheten
-    radio.setChannel(76);                   // Use same channel as transmitter
-    radio.setRetries(1, 1);                 // Reduce retries for faster response
-    radio.openWritingPipe(addresses[0]);    // 00001
-    radio.openReadingPipe(1, addresses[1]); // 00002
-    radio.startListening();
-    radio.flush_tx();
-    radio.flush_rx();
-
-    Serial.println("Radio configuration:");
-    Serial.print("Channel: ");
-    Serial.println(radio.getChannel());
-    Serial.print("Data Rate: ");
-    Serial.println(radio.getDataRate());
-    Serial.print("PA Level: ");
-    Serial.println(radio.getPALevel());
-    Serial.println("=== RADIO DEBUG: Initialization complete ===");
-}
-
-// void initializeServos() {
-//     steeringServo.attach(SERVO_PIN_1);
-// }
-
 void initializeButton()
 {
     pinMode(BUTTON_PIN, INPUT_PULLUP);
 }
 
-void initializeLEDs()
-{
-    pinMode(BLUE_LED_PIN_1, OUTPUT);
-    pinMode(BLUE_LED_PIN_2, OUTPUT);
-    pinMode(WHITE_LED_PIN_3, OUTPUT);
-    pinMode(WHITE_LED_PIN_4, OUTPUT);
-    pinMode(RED_LED_PIN_1, OUTPUT);
-    pinMode(RED_LED_PIN_2, OUTPUT);
-
-    Serial.println("=== LED DEBUG: Initializing LEDs ===");
-    Serial.println("Setting all LEDs to HIGH during initialization");
-    digitalWrite(BLUE_LED_PIN_1, HIGH);
-    digitalWrite(BLUE_LED_PIN_2, HIGH);
-    digitalWrite(WHITE_LED_PIN_3, HIGH);
-    digitalWrite(WHITE_LED_PIN_4, HIGH);
-    digitalWrite(RED_LED_PIN_1, HIGH);
-    digitalWrite(RED_LED_PIN_2, HIGH);
-    Serial.println("All LEDs set to HIGH - they should be ON if wired correctly");
-}
-
-void receiveData()
-{
-    if (radio.available())
-    {
-        radio.read(&data, sizeof(Data_Package)); // Läs hela data och lagra den i 'data'-strukturen
-
-        // Reduce debug output frequency to minimize serial spam
-        static unsigned long lastReceiveDebug = 0;
-        unsigned long currentTime = millis();
-        if (currentTime - lastReceiveDebug >= 1000) // Only every 1 second
-        {
-            Serial.print("---------------------- Received Angle Value: ");
-            Serial.print(data.steeringAngle);
-            Serial.print(" | Received Throttle Value: ");
-            Serial.println(data.throttle);
-            lastReceiveDebug = currentTime;
-        }
-
-        lastThrottle = data.throttle; // Update last valid throttle value
-        lastReceiveTime = millis();   // Update last receive time
-    }
-    else
-    {
-        // Only print waiting message occasionally to reduce serial spam
-        unsigned long currentTime = millis();
-        if (currentTime - lastDebugTime >= DEBUG_INTERVAL)
-        {
-            Serial.println("Waiting for the transmitter...");
-            lastDebugTime = currentTime;
-        }
-    }
-}
-
 void controlServos()
 {
     int angle = data.steeringAngle;
-    int MAX_ANGLE = 127;
-    unsigned long currentTime = millis();
 
     // Center deadzone - completely off
     if (angle >= 120 && angle <= 134)
@@ -254,15 +152,6 @@ void readButtonState()
     // debugButtonState();
 }
 
-void transmitButtonState()
-{
-    radio.stopListening();                    // Stoppa mottagning
-    delayMicroseconds(200);                   // Increase delay to ensure radio is ready
-    radio.write(&data, sizeof(Data_Package)); // Skicka hela data-paketet
-    delayMicroseconds(200);                   // Increase delay before switching back
-    radio.startListening();                   // Återgå till mottagning
-}
-
 void checkFailsafe()
 {
     if (millis() - lastReceiveTime > FailsafeTimeout)
@@ -276,200 +165,4 @@ void debugButtonState()
 {
     Serial.print("Button State: ");
     Serial.println(data.buttonState);
-}
-
-void blinkBlueLeds()
-{
-    unsigned long currentTime = millis();
-
-    // Determine if vehicle is moving
-    bool isMoving = (lastThrottle < 119 || lastThrottle > 135); // Moving forward or backward
-
-    // Different blink intervals based on movement
-    unsigned long blinkInterval;
-    if (isMoving)
-    {
-        blinkInterval = 150; // Fast blink when moving (150ms = ~3.3Hz)
-    }
-    else
-    {
-        blinkInterval = BLUE_BLINK_INTERVAL; // Slow blink when stationary (500ms = 1Hz)
-    }
-
-    if (currentTime - lastBlueLedUpdate >= blinkInterval)
-    {
-        if (isMoving)
-        {
-            // Bistable flip-flop behavior when moving - alternate between LEDs
-            static bool flipFlopState = false;
-            flipFlopState = !flipFlopState;
-
-            if (flipFlopState)
-            {
-                digitalWrite(BLUE_LED_PIN_1, HIGH); // Left LED on
-                digitalWrite(BLUE_LED_PIN_2, LOW);  // Right LED off
-            }
-            else
-            {
-                digitalWrite(BLUE_LED_PIN_1, LOW);  // Left LED off
-                digitalWrite(BLUE_LED_PIN_2, HIGH); // Right LED on
-            }
-
-            // Reduce debug output frequency when moving
-            static unsigned long lastMovingDebug = 0;
-            if (currentTime - lastMovingDebug >= 1000) // Only every 1 second when moving
-            {
-                Serial.print("Blue LEDs (MOVING): ");
-                Serial.println(flipFlopState ? "LEFT" : "RIGHT");
-                lastMovingDebug = currentTime;
-            }
-        }
-        else
-        {
-            // Normal synchronized blinking when stationary
-            blueLedState = !blueLedState;
-            digitalWrite(BLUE_LED_PIN_1, blueLedState);
-            digitalWrite(BLUE_LED_PIN_2, blueLedState);
-
-            // Less frequent debug when stationary
-            static unsigned long lastStationaryDebug = 0;
-            if (currentTime - lastStationaryDebug >= 2000) // Only every 2 seconds when stationary
-            {
-                Serial.print("Blue LEDs (STATIONARY): ");
-                Serial.println(blueLedState ? "HIGH" : "LOW");
-                lastStationaryDebug = currentTime;
-            }
-        }
-
-        lastBlueLedUpdate = currentTime;
-    }
-}
-
-void blinkWhiteLeds(int filteredAngle)
-{
-    // Smart headlight system based on throttle and steering
-    controlSmartHeadlights(filteredAngle);
-}
-
-void controlSmartHeadlights(int filteredAngle)
-{
-    // Safety check - ensure we have received valid data
-    if (millis() - lastReceiveTime > FailsafeTimeout)
-    {
-        // No valid data - turn off all lights
-        digitalWrite(WHITE_LED_PIN_3, LOW);
-        digitalWrite(WHITE_LED_PIN_4, LOW);
-        return;
-    }
-
-    unsigned long currentTime = millis();
-    static unsigned long lastBlinkTime = 0;
-    static bool blinkState = false;
-    static unsigned long lastDebugTime = 0;
-    const unsigned long BLINK_INTERVAL = 500; // 500ms blink interval for turn signals
-
-    // Determine vehicle state
-    bool isMovingForward = (lastThrottle > 135);                 // Forward threshold
-    bool isMovingBackward = (lastThrottle < 119);                // Backward threshold
-    bool isStill = (lastThrottle >= 119 && lastThrottle <= 135); // Still/neutral
-
-    // Determine steering state
-    bool isTurningLeft = (filteredAngle < 120);
-    bool isTurningRight = (filteredAngle > 134);
-    bool isStraight = (filteredAngle >= 120 && filteredAngle <= 134);
-
-    // Update blink state for turn signals
-    if (currentTime - lastBlinkTime >= BLINK_INTERVAL)
-    {
-        blinkState = !blinkState;
-        lastBlinkTime = currentTime;
-    }
-
-    // Debug output every 2 seconds instead of 500ms to reduce serial spam
-    if (currentTime - lastDebugTime >= 2000)
-    {
-        Serial.print("SMART LEDs: ");
-        if (isStill)
-            Serial.print("STILL");
-        else if (isMovingForward)
-            Serial.print("FORWARD");
-        else if (isMovingBackward)
-            Serial.print("BACKWARD");
-
-        Serial.print(" | ");
-        if (isStraight)
-            Serial.print("STRAIGHT");
-        else if (isTurningLeft)
-            Serial.print("LEFT");
-        else if (isTurningRight)
-            Serial.print("RIGHT");
-
-        Serial.print(" | Throttle: ");
-        Serial.print(lastThrottle);
-        Serial.print(" | Angle: ");
-        Serial.println(filteredAngle);
-        lastDebugTime = currentTime;
-    }
-
-    // Control logic
-    if (isStill)
-    {
-        // Standing still - all lights off
-        digitalWrite(WHITE_LED_PIN_3, LOW); // Left LED off
-        digitalWrite(WHITE_LED_PIN_4, LOW); // Right LED off
-        digitalWrite(RED_LED_PIN_1, LOW);   // Red LEDs off
-        digitalWrite(RED_LED_PIN_2, LOW);
-    }
-    else if (isMovingForward)
-    {
-        // Turn off red LEDs when moving forward
-        digitalWrite(RED_LED_PIN_1, LOW);
-        digitalWrite(RED_LED_PIN_2, LOW);
-
-        if (isStraight)
-        {
-            // Moving forward straight - both headlights on constant
-            digitalWrite(WHITE_LED_PIN_3, HIGH); // Left LED on
-            digitalWrite(WHITE_LED_PIN_4, HIGH); // Right LED on
-        }
-        else if (isTurningLeft)
-        {
-            // Moving forward + turning left - left blinks, right constant
-            digitalWrite(WHITE_LED_PIN_3, blinkState ? HIGH : LOW); // Left LED blinks
-            digitalWrite(WHITE_LED_PIN_4, HIGH);                    // Right LED constant
-        }
-        else if (isTurningRight)
-        {
-            // Moving forward + turning right - right blinks, left constant
-            digitalWrite(WHITE_LED_PIN_3, HIGH);                    // Left LED constant
-            digitalWrite(WHITE_LED_PIN_4, blinkState ? HIGH : LOW); // Right LED blinks
-        }
-    }
-    else if (isMovingBackward)
-    {
-        if (isStraight)
-        {
-            // Moving backward straight - white lights off, red lights on constant
-            digitalWrite(WHITE_LED_PIN_3, LOW); // Left LED off
-            digitalWrite(WHITE_LED_PIN_4, LOW); // Right LED off
-            digitalWrite(RED_LED_PIN_1, HIGH);  // Red LEDs on constant
-            digitalWrite(RED_LED_PIN_2, HIGH);
-        }
-        else if (isTurningLeft)
-        {
-            // Moving backward + turning left - left white blinks, left red blinks, right red constant
-            digitalWrite(WHITE_LED_PIN_3, blinkState ? HIGH : LOW); // Left white LED blinks
-            digitalWrite(WHITE_LED_PIN_4, LOW);                     // Right white LED off
-            digitalWrite(RED_LED_PIN_1, blinkState ? HIGH : LOW);   // Left red LED blinks (turn signal)
-            digitalWrite(RED_LED_PIN_2, HIGH);                      // Right red LED constant (reverse light)
-        }
-        else if (isTurningRight)
-        {
-            // Moving backward + turning right - right white blinks, right red blinks, left red constant
-            digitalWrite(WHITE_LED_PIN_3, LOW);                     // Left white LED off
-            digitalWrite(WHITE_LED_PIN_4, blinkState ? HIGH : LOW); // Right white LED blinks
-            digitalWrite(RED_LED_PIN_1, HIGH);                      // Left red LED constant (reverse light)
-            digitalWrite(RED_LED_PIN_2, blinkState ? HIGH : LOW);   // Right red LED blinks (turn signal)
-        }
-    }
 }
