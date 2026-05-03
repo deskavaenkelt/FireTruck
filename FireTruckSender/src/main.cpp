@@ -5,6 +5,7 @@
 #define LED_PIN 6
 #define STEERING_PIN A0
 #define THROTTLE_PIN A1
+#define BUTTON_PIN 2 // Button on joystick connected to D2
 
 int SERIAL_SPEED = 9600;
 const unsigned long LOOP_INTERVAL = 10; // Increase to 100Hz for better responsiveness
@@ -45,6 +46,7 @@ int servoJitterFilter(int angle);
 void setup()
 {
   pinMode(LED_PIN, OUTPUT);
+  pinMode(BUTTON_PIN, INPUT_PULLUP); // Button with internal pullup
   digitalWrite(LED_PIN, LOW);
   Serial.begin(SERIAL_SPEED);
   while (!Serial)
@@ -62,6 +64,8 @@ void setup()
     digitalWrite(LED_PIN, LOW);
     delay(200);
   }
+
+  Serial.println("Transmitter ready - LED blinking indicates button state");
 }
 
 void loop()
@@ -158,12 +162,18 @@ void readInputValues(bool shouldDebug)
 {
   data.steeringAngle = readAndMapAnalogInput(STEERING_PIN);
   data.throttle = readAndMapAnalogInput(THROTTLE_PIN);
+
+  // Read button state (inverted because of INPUT_PULLUP)
+  data.buttonState = !digitalRead(BUTTON_PIN);
+
   if (shouldDebug)
   {
     Serial.print("        Sending: Angle Value: ");
     Serial.print(data.steeringAngle);
     Serial.print(" | Throttle Value: ");
-    Serial.println(data.throttle);
+    Serial.print(data.throttle);
+    Serial.print(" | Button: ");
+    Serial.println(data.buttonState ? "PRESSED" : "RELEASED");
   }
 }
 

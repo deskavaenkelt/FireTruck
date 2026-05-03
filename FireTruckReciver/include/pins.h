@@ -35,6 +35,11 @@
 #define SERVO_LEFT_RANGE (SERVO_CENTER_ANGLE - SERVO_MIN_ANGLE)  // 78 degrees left
 #define SERVO_RIGHT_RANGE (SERVO_MAX_ANGLE - SERVO_CENTER_ANGLE) // 78 degrees right
 
+// Audio system:
+#define SPEAKER_PIN 29      // Digital pin for speaker (to PAM8403 L_IN) - free pin
+#define AUDIO_ENABLE_PIN 28 // Enable pin for audio amplifier (optional)
+// #define AUDIO_VOLUME_PIN 13     // DISABLED - was causing interference
+
 #endif
 
 // ARDUINO MEGA 2560 PIN USAGE:
